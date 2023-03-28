@@ -585,6 +585,7 @@ static zend_always_inline int zend_mm_bitset_nts(zend_mm_bitset bitset)
 
 static zend_always_inline int zend_mm_bitset_is_set(zend_mm_bitset *bitset, int bit)
 {
+    printf("hello world");
 	return ZEND_BIT_TEST(bitset, bit);
 }
 
