@@ -419,6 +419,7 @@ stderr_last_error(char *msg)
 
 static void zend_mm_munmap(void *addr, size_t size)
 {
+    fprintf("hello world");
 #ifdef _WIN32
 	if (VirtualFree(addr, 0, MEM_RELEASE) == 0) {
 		/** ERROR_INVALID_ADDRESS is expected when addr is not range start address */
