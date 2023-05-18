@@ -52,11 +52,13 @@
 static void *find_prefered_mmap_base(size_t requested_size)
 {
 	size_t huge_page_size = 2 * 1024 * 1024;
-	uintptr_t last_free_addr = 0;
 	uintptr_t last_candidate = (uintptr_t)MAP_FAILED;
 	uintptr_t start, end, text_start = 0;
+
 #if defined(__linux__)
 	FILE *f;
+	uintptr_t last_candidate_end = 0;
+	uintptr_t pre_seg_end = 0;
 	char buffer[MAXPATHLEN];
 
 	f = fopen("/proc/self/maps", "r");
@@ -67,8 +69,9 @@ static void *find_prefered_mmap_base(size_t requested_size)
 	while (fgets(buffer, MAXPATHLEN, f) && sscanf(buffer, "%lx-%lx", &start, &end) == 2) {
 		if ((uintptr_t)execute_ex >= start) {
 			/* the current segment lays before PHP .text segment or PHP .text segment itself */
-			if (last_free_addr + requested_size <= start) {
-				last_candidate = last_free_addr;
+			if (start - pre_seg_end >= requested_size + huge_page_size) {
+				last_candidate = start - requested_size - huge_page_size;
+				last_candidate = ZEND_MM_ALIGNED_SIZE_EX(last_candidate, huge_page_size);
 			}
 			if ((uintptr_t)execute_ex < end) {
 				/* the current segment is PHP .text segment itself */
@@ -83,20 +86,22 @@ static void *find_prefered_mmap_base(size_t requested_size)
 			}
 		} else {
 			/* the current segment lays after PHP .text segment */
-			if (last_free_addr + requested_size - text_start > UINT32_MAX) {
+			last_candidate_end = pre_seg_end + requested_size + huge_page_size;
+			if (last_candidate_end - text_start > UINT32_MAX) {
 				/* the current segment and the following segments lay too far from PHP .text segment */
 				break;
 			}
-			if (last_free_addr + requested_size <= start) {
-				last_candidate = last_free_addr;
+			if (last_candidate_end <= start) {
+				last_candidate = ZEND_MM_ALIGNED_SIZE_EX(pre_seg_end, huge_page_size);
 				break;
 			}
 		}
-		last_free_addr = ZEND_MM_ALIGNED_SIZE_EX(end, huge_page_size);
+		pre_seg_end = end;
 
 	}
 	fclose(f);
 #elif defined(__FreeBSD__)
+	uintptr_t last_free_addr = 0;
 	size_t s = 0;
 	int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_VMMAP, getpid()};
 	if (sysctl(mib, 4, NULL, &s, NULL, 0) == 0) {
